@@ -25,7 +25,6 @@
       <version>4.11</version>
       <scope>test</scope>
     </dependency>
-    
     <dependency>
       <groupId>com.google.ortools</groupId>
       <artifactId>ortools-java</artifactId>
