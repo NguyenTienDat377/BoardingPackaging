@@ -114,7 +114,7 @@ public class App {
                                 Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
                                 ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[] {i, j}, new ArrayList<>());
                                 for (int[] pos : coveringPositions) {
-                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1);
+                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], -1);
                                 }
                             }
                         } else if (board[i][j] < 0) {
@@ -156,8 +156,6 @@ public class App {
             int w = sc.nextInt();
             int c = sc.nextInt();
             rectangles[i] = new Rectangle(h, w, c);
-            A_r.put(i, new ArrayList<>()); 
-            B_ijr.put(i, new HashMap<>()); 
         }
 
         MPSolver solver = MPSolver.createSolver("CBC");
@@ -192,6 +190,8 @@ public class App {
 
         System.out.println("Number of variable: " + solver.numVariables());
         System.out.println("Number of constraints: " + solver.numConstraints());
+        System.out.println(A_r);
+        System.out.println(B_ijr);
         addConstraints(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
         final MPSolver.ResultStatus resultStatus = solver.solve();
         if (resultStatus == MPSolver.ResultStatus.OPTIMAL) {
