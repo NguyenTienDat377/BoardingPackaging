@@ -14,8 +14,7 @@ public class AppTest
     }
 
     @Test
-    public void testMainMethod() {
-        // Simulate user input
+    public static void main() {
         String input = "3 3 2\n" + // m, n, r
                       "1 2 3\n" +  // board row 1
                       "4 5 6\n" +  // board row 2
