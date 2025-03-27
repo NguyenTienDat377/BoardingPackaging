@@ -16,6 +16,90 @@ import java.util.Map;
  *
  */
 public class App {
+    private static void printProblemDetails(
+        MPSolver solver,
+        int m, int n, int r,
+        int[][] board,
+        Rectangle[] rectangles,
+        MPVariable[][][] x_ijr,
+        MPVariable[][] y_ij,
+        Map<Integer, ArrayList<int[]>> A_r,
+        Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr) {
+    
+    System.out.println("\n=== VARIABLES ===");
+    System.out.println("1. y_ij variables (1 if cell i,j is uncovered):");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            System.out.printf("y_%d%d (board value: %d)\n", i, j, board[i][j]);
+        }
+    }
+
+    System.out.println("\n2. x_ijr variables (1 if rectangle r starts at position i,j):");
+    for (int k = 0; k < r; k++) {
+        System.out.printf("\nRectangle %d (h=%d, w=%d, cost=%d) can start at:\n", 
+            k, rectangles[k].h, rectangles[k].w, rectangles[k].c);
+        for (int[] pos : A_r.get(k)) {
+            System.out.printf("x_%d%d%d ", pos[0], pos[1], k);
+        }
+        System.out.println();
+    }
+
+    System.out.println("\n=== CONSTRAINTS ===");
+    System.out.println("1. Rectangle placement constraints (≤ 1):");
+    for (int k = 0; k < r; k++) {
+        System.out.printf("\nRectangle %d: ", k);
+        for (int[] pos : A_r.get(k)) {
+            System.out.printf("x_%d%d%d + ", pos[0], pos[1], k);
+        }
+        System.out.println("≤ 1");
+    }
+
+    System.out.println("\n2. Cell coverage constraints:");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            if (board[i][j] > 0) {
+                System.out.printf("\nCell (%d,%d) positive value=%d: y_%d%d ≤ ", 
+                    i, j, board[i][j], i, j);
+                for (int k = 0; k < r; k++) {
+                    Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
+                    ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[]{i, j}, new ArrayList<>());
+                    for (int[] pos : coveringPositions) {
+                        System.out.printf("x_%d%d%d + ", pos[0], pos[1], k);
+                    }
+                }
+                System.out.println();
+            } else if (board[i][j] < 0) {
+                System.out.printf("\nCell (%d,%d) negative value=%d: %dy_%d%d ≥ ", 
+                    i, j, board[i][j], r, i, j);
+                for (int k = 0; k < r; k++) {
+                    Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
+                    ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[]{i, j}, new ArrayList<>());
+                    for (int[] pos : coveringPositions) {
+                        System.out.printf("x_%d%d%d + ", pos[0], pos[1], k);
+                    }
+                }
+                System.out.println();
+            }
+        }
+    }
+
+    System.out.println("\n=== OBJECTIVE FUNCTION ===");
+    System.out.print("Maximize: ");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            if (board[i][j] != 0) {
+                System.out.printf("%d*y_%d%d + ", board[i][j], i, j);
+            }
+        }
+    }
+    System.out.println();
+    for (int k = 0; k < r; k++) {
+        for (int[] pos : A_r.get(k)) {
+            System.out.printf("-%d*x_%d%d%d + ", rectangles[k].c, pos[0], pos[1], k);
+        }
+    }
+    System.out.println();
+}
     public static Map<Integer, ArrayList<int[]>> create_A_r(int m, int n, int r, Rectangle[] rectangles) {
         Map<Integer, ArrayList<int[]>> A_r = new HashMap<>();
         for (int k = 0; k < r; k++) {
@@ -97,6 +181,7 @@ public class App {
             MPVariable[][] y_ij,
             Map<Integer, ArrayList<int[]>> A_r,
             Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr) {
+                printDebugInfo(A_r, B_ijr);
                 double infinity = java.lang.Double.POSITIVE_INFINITY;
                 for (int k = 0; k < r; k++) {
                     MPConstraint constraint = solver.makeConstraint(-infinity, 1, "");
@@ -114,7 +199,7 @@ public class App {
                                 Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
                                 ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[] {i, j}, new ArrayList<>());
                                 for (int[] pos : coveringPositions) {
-                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], -1);
+                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1);
                                 }
                             }
                         } else if (board[i][j] < 0) {
@@ -163,7 +248,7 @@ public class App {
     public static void main( String[] args ) {
         Scanner sc = new Scanner(System.in);
         try {
-            String path = "src\\dataset\\test1\\extend_p1.txt";
+            String path = "src\\dataset\\test1\\debug.txt";
             File file = new File(path);
             sc = new Scanner(file);
             sc.useDelimiter("[,\\s]+");
@@ -197,6 +282,17 @@ public class App {
             int w = sc.nextInt();
             int c = sc.nextInt();
             rectangles[i] = new Rectangle(h, w, c);
+        }
+
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                System.out.print(board[i][j] + " ");
+            }
+            System.out.println();
+        }
+
+        for (int i = 0; i < r; i++) {
+            System.out.println(rectangles[i].h + " " + rectangles[i].w + " " + rectangles[i].c);
         }
 
         MPSolver solver = MPSolver.createSolver("CBC");
@@ -233,6 +329,7 @@ public class App {
 
         MPObjective objective = addObjective(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
         addConstraints(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
+        printProblemDetails(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
         System.out.println("Number of variable: " + solver.numVariables());
         System.out.println("Number of constraints: " + solver.numConstraints());
         
@@ -241,7 +338,6 @@ public class App {
         if (resultStatus == MPSolver.ResultStatus.OPTIMAL) {
             System.out.println("Optimal solution!:");
             System.out.println("Objective value: " + objective.value());
-            /* 
             System.out.println("Solution value: ");
             for (int i = 0; i < m; i++) {
                 for (int j = 0; j < n; j++) {
@@ -249,6 +345,7 @@ public class App {
                 }
                 System.out.println();
             }
+            /* 
             System.out.println();
             for (int i = 0; i < m; i++) {
                 for (int j = 0; j < n; j++) {
