@@ -7,10 +7,8 @@ import com.google.ortools.linearsolver.MPSolver;
 import com.google.ortools.linearsolver.MPVariable;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Scanner;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+
 /**
  * Hello world!
  *
@@ -122,26 +120,27 @@ public class App {
         return A_r;
     }
 
-    public static Map<Integer, Map<int[], ArrayList<int[]>>> create_B_ijr(int m, int n, int r, Rectangle[] rectangles, Map<Integer, ArrayList<int[]>> A_r) {
-        Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr = new HashMap<>();
-        for (int k = 0; k < r; k++) {
-            Map<int[], ArrayList<int[]>> posMap = new HashMap<>();
-            for (int[] topLeft : A_r.get(k)) {
-                for (int i = topLeft[0]; i < topLeft[0] + rectangles[k].h; i++) {
-                    for (int j = topLeft[1]; j < topLeft[1] + rectangles[k].w; j++) {
-                        int[] coveredPos = new int[]{i, j};
-                        ArrayList<int[]> coveringPositions = posMap.computeIfAbsent(
-                            coveredPos, 
-                            k_ -> new ArrayList<>()
-                        );
-                        coveringPositions.add(topLeft);
+    public static Map<Position, Map<Integer, ArrayList<int[]>>> create_B_ijr(int m, int n, int r, Rectangle[] rectangles, Map<Integer, ArrayList<int[]>> A_r) {
+        Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr = new HashMap<>();
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                Map<Integer, ArrayList<int[]>> rectangleMap =  new HashMap<>();
+                for (int k = 0; k < r; k++) {
+                    ArrayList<int[]> coveringRectangles = new ArrayList<>();
+                    for (int[] pos : A_r.get(k)) {
+                        if (i <= pos[0] + rectangles[k].h &&  j <= pos[1] + rectangles[k].w) {
+                            coveringRectangles.add(pos);
+                        }
                     }
+                    rectangleMap.put((Integer) k, coveringRectangles);
                 }
+                Position pos = new Position(i, j);
+                B_ijr.put(pos, rectangleMap);
             }
-            B_ijr.put(k, posMap);
         }
         return B_ijr;
     }
+
     
 
     public static class Rectangle {
@@ -154,6 +153,28 @@ public class App {
             this.c = c;
         }
     }
+    public static class Position {
+        int i, j;
+
+        public Position(int i, int j) {
+            this.i = i;
+            this.j = j;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Position position = (Position) o;
+            if (i == position.i && j == position.j) return true;
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return i + 31 * j;
+        }
+    }
 
     public static MPObjective addObjective(MPSolver solver,
     int m, int n, int r,
@@ -161,8 +182,7 @@ public class App {
     Rectangle[] rectangles,
     MPVariable[][][] x_ijr,
     MPVariable[][] y_ij,
-    Map<Integer, ArrayList<int[]>> A_r,
-    Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr) {
+    Map<Integer, ArrayList<int[]>> A_r, Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr) {
         MPObjective objective = solver.objective();
         for (int i = 0; i < m; i++) {
             for (int j = 0; j < n; j++) {
@@ -186,14 +206,15 @@ public class App {
             MPVariable[][][] x_ijr,
             MPVariable[][] y_ij,
             Map<Integer, ArrayList<int[]>> A_r,
-            Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr) {
-                printDebugInfo(A_r, B_ijr);
+            Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr) {
+                //printDebugInfo(A_r, B_ijr);
                 double infinity = java.lang.Double.POSITIVE_INFINITY;
-                MPConstraint globalRectangleUsageConstraint = solver.makeConstraint(0, 1, "Global_Rectangle_Usage");
                 for (int k = 0; k < r; k++) {
-                    MPConstraint constraint = solver.makeConstraint(0, 1, "");
+                    //Constraint 2
+                    MPConstraint rectangleUsageConstraint = solver.makeConstraint(0, 1, "Rectangle_" + k + "_Usage");
                     for (int[] pos : A_r.get(k)) {
-                        constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1);
+                        System.out.println("Adding constraint for rectangle " + k + " at position " + pos[0] + "," + pos[1]);
+                        rectangleUsageConstraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1);
                     }
                 }
 
@@ -201,29 +222,28 @@ public class App {
                     for (int j = 0; j < n; j++) {
                         if (board[i][j] > 0) {
                             MPConstraint constraint = solver.makeConstraint(-infinity, 0, "");
-                            constraint.setCoefficient(y_ij[i][j], -1.0);  
-                            
+                            constraint.setCoefficient(y_ij[i][j], -1.0);
                             for (int k = 0; k < r; k++) {
-                                Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
-                                ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[]{i, j}, new ArrayList<>());
-                                
+                                Position position = new Position(i, j);
+                                Map<Integer, ArrayList<int[]>> posMap = B_ijr.get(position);
+                                ArrayList<int[]> coveringPositions = posMap.getOrDefault(k, new ArrayList<>());
                                 for (int[] pos : coveringPositions) {
                                     constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1.0);
-                                    globalRectangleUsageConstraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1.0);
                                 }
                             }
+
                         } else if (board[i][j] < 0) {
-                            MPConstraint constraint = solver.makeConstraint(1.0, infinity, "");
+                            MPConstraint constraint = solver.makeConstraint(0, infinity, "Negative_cell_" + i + "_" + j);
                             constraint.setCoefficient(y_ij[i][j], r);
                             for (int k = 0; k < r; k++) {
-                                Map<int[], ArrayList<int[]>> posMap = B_ijr.get(k);
-                                ArrayList<int[]> coveringPositions = posMap.getOrDefault(new int[]{ i, j }, new ArrayList<>());
+                                Position position = new Position(i, j);
+                                Map<Integer, ArrayList<int[]>> posMap = B_ijr.get(position);
+                                ArrayList<int[]> coveringPositions = posMap.getOrDefault(k, new ArrayList<>());
                                 for (int[] pos : coveringPositions) {
-                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], -1);
+                                    constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1.0);
                                 }
                             }
                         }
-                        
                     }
                 }
             }
@@ -258,7 +278,7 @@ public class App {
     public static void main( String[] args ) {
         Scanner sc = new Scanner(System.in);
         try {
-            String path = "src\\dataset\\test1\\extend_p1.txt";
+            String path = "src\\dataset\\test1\\debug.txt";
             File file = new File(path);
             sc = new Scanner(file);
             sc.useDelimiter("[,\\s]+");
@@ -315,10 +335,11 @@ public class App {
         MPVariable[][] y_ij = new MPVariable[m][n];
 
         Map<Integer, ArrayList<int[]>> A_r = create_A_r(m, n, r, rectangles);
-        Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr = create_B_ijr(m, n, r, rectangles, A_r);
+        Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr = create_B_ijr(m, n, r, rectangles, A_r);
 
-        printDebugInfo(A_r, B_ijr);
+        //printDebugInfo(A_r, B_ijr);
 
+        //Constraint 5
         for (int i = 0; i < m; i++) {
             for (int j = 0; j < n; j++) {
                 for (int k = 0; k < r; k++) {
@@ -339,7 +360,7 @@ public class App {
 
         MPObjective objective = addObjective(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
         addConstraints(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
-        printProblemDetails(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
+        //printProblemDetails(solver, m, n, r, board, rectangles, x_ijr, y_ij, A_r, B_ijr);
         System.out.println("Number of variable: " + solver.numVariables());
         System.out.println("Number of constraints: " + solver.numConstraints());
         
@@ -355,18 +376,16 @@ public class App {
                 }
                 System.out.println();
             }
-            /* 
             System.out.println();
             for (int i = 0; i < m; i++) {
                 for (int j = 0; j < n; j++) {
                     for (int k = 0; k < r; k++) {
-                        System.out.print(x_ijr[i][j][k]);
+                        System.out.print(x_ijr[i][j][k].solutionValue());
                     }
                     System.out.println();
                 }
                 System.out.println();
             }
-            */
         }
         
     }
