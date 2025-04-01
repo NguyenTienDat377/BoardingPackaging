@@ -120,6 +120,7 @@ public class App {
         return A_r;
     }
 
+    /*
     public static Map<Position, Map<Integer, ArrayList<int[]>>> create_B_ijr(int m, int n, int r, Rectangle[] rectangles, Map<Integer, ArrayList<int[]>> A_r) {
         Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr = new HashMap<>();
         for (int i = 0; i < m; i++) {
@@ -140,7 +141,7 @@ public class App {
         }
         return B_ijr;
     }
-
+    */
     
 
     public static class Rectangle {
@@ -197,7 +198,7 @@ public class App {
         objective.setMaximization();
         return objective;
     }
-
+/*
      public static void addConstraints(
             MPSolver solver,
             int m, int n, int r,
@@ -247,6 +248,98 @@ public class App {
                     }
                 }
             }
+ */
+// Corrected method to create B_ijr - the set of positions where a rectangle covers a cell
+public static Map<Position, Map<Integer, ArrayList<int[]>>> create_B_ijr(int m, int n, int r, Rectangle[] rectangles, Map<Integer, ArrayList<int[]>> A_r) {
+    Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr = new HashMap<>();
+
+    // Initialize the map for all positions
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            Position pos = new Position(i, j);
+            B_ijr.put(pos, new HashMap<>());
+        }
+    }
+
+    // For each rectangle and each possible starting position, mark all cells it covers
+    for (int k = 0; k < r; k++) {
+        for (int[] startPos : A_r.get(k)) {
+            int startI = startPos[0];
+            int startJ = startPos[1];
+
+            // For each cell that would be covered by this rectangle at this position
+            for (int i = startI; i < startI + rectangles[k].h; i++) {
+                for (int j = startJ; j < startJ + rectangles[k].w; j++) {
+                    Position coveredPos = new Position(i, j);
+
+                    // Add this starting position to the list of positions that cover (i,j)
+                    Map<Integer, ArrayList<int[]>> rectMap = B_ijr.get(coveredPos);
+                    if (!rectMap.containsKey(k)) {
+                        rectMap.put(k, new ArrayList<>());
+                    }
+                    rectMap.get(k).add(startPos);
+                }
+            }
+        }
+    }
+
+    return B_ijr;
+}
+
+    // Corrected constraints method
+    public static void addConstraints(
+            MPSolver solver,
+            int m, int n, int r,
+            int[][] board,
+            Rectangle[] rectangles,
+            MPVariable[][][] x_ijr,
+            MPVariable[][] y_ij,
+            Map<Integer, ArrayList<int[]>> A_r,
+            Map<Position, Map<Integer, ArrayList<int[]>>> B_ijr) {
+
+        double infinity = java.lang.Double.POSITIVE_INFINITY;
+
+        // Constraint (2): Each rectangle is used at most once
+        for (int k = 0; k < r; k++) {
+            MPConstraint rectangleUsageConstraint = solver.makeConstraint(0, 1, "Rectangle_" + k + "_Usage");
+            for (int[] pos : A_r.get(k)) {
+                rectangleUsageConstraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], 1);
+            }
+        }
+
+        // Constraints (3) and (4): Cell coverage constraints
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                Position position = new Position(i, j);
+
+                if (board[i][j] > 0) {
+                    // Constraint (3): y_ij ≤ sum of x_uvr for all (u,v) in B_ijr and all r
+                    MPConstraint constraint = solver.makeConstraint(-infinity, 0, "Positive_cell_" + i + "_" + j);
+                    constraint.setCoefficient(y_ij[i][j], 1.0);  // Changed from -1.0 to 1.0
+
+                    Map<Integer, ArrayList<int[]>> rectMap = B_ijr.get(position);
+                    for (int k = 0; k < r; k++) {
+                        ArrayList<int[]> coveringPositions = rectMap.getOrDefault(k, new ArrayList<>());
+                        for (int[] pos : coveringPositions) {
+                            constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], -1.0);  // Changed from 1.0 to -1.0
+                        }
+                    }
+                } else if (board[i][j] < 0) {
+                    // Constraint (4): |R|y_ij ≥ sum of x_uvr for all (u,v) in B_ijr and all r
+                    MPConstraint constraint = solver.makeConstraint(0, infinity, "Negative_cell_" + i + "_" + j);
+                    constraint.setCoefficient(y_ij[i][j], r);
+
+                    Map<Integer, ArrayList<int[]>> rectMap = B_ijr.get(position);
+                    for (int k = 0; k < r; k++) {
+                        ArrayList<int[]> coveringPositions = rectMap.getOrDefault(k, new ArrayList<>());
+                        for (int[] pos : coveringPositions) {
+                            constraint.setCoefficient(x_ijr[pos[0]][pos[1]][k], -1.0);  // Changed from 1.0 to -1.0
+                        }
+                    }
+                }
+            }
+        }
+    }
             private static void printDebugInfo(
                 Map<Integer, ArrayList<int[]>> A_r,
                 Map<Integer, Map<int[], ArrayList<int[]>>> B_ijr) {
